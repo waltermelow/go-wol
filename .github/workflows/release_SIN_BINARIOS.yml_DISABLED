@@ -1,0 +1,68 @@
+# Fuente: https://github.com/Seneca-CDOT/telescope/blob/b88f00b4ba9b10932cb6ecf3a5132616a31b8615/.github/workflows/release.yml
+# Fuente: https://birtony.medium.com/setting-up-automated-release-workflow-with-github-actions-628dbca2446e
+
+name: Release
+
+on:
+  push:
+    # Sequence of patterns matched against refs/tags
+    tags:
+      - '[0-9]+.[0-9]+.[0-9]+*' # Push events to any matching semantic tag. For example, 1.10.1 or 2.0.0 or 3.0.0-alpha.
+        # For more details, see https://docs.github.com/en/actions/reference/workflow-syntax-for-github-actions#filter-pattern-cheat-sheet
+      # and https://docs.npmjs.com/about-semantic-versioning
+
+jobs:
+  docker-production:
+    name: Docker Build and Push - Production
+    uses: Seneca-CDOT/telescope/.github/workflows/docker-build-and-push.yml@master
+    with:
+      deploy_tag: production
+      web_url: 'https://telescope.cdot.systems'
+      image_url: 'https://api.telescope.cdot.systems/v1/image'
+      sso_url: 'https://api.telescope.cdot.systems/v1/auth'
+      posts_url: 'https://api.telescope.cdot.systems/v1/posts'
+      search_url: 'https://api.telescope.cdot.systems/v1/search'
+      feed_discovery_url: 'https://api.telescope.cdot.systems/v1/feed-discovery'
+      status_url: 'https://api.telescope.cdot.systems/v1/status'
+      dependency_discovery_url: 'https://api.telescope.cdot.systems/v1/dependency-discovery'
+      supabase_url: 'https://api.telescope.cdot.systems/v1/supabase'
+      anon_key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyAgCiAgICAicm9sZSI6ICJhbm9uIiwKICAgICJpc3MiOiAic3VwYWJhc2UiLAogICAgImlhdCI6IDE2NDg2MTI4MDAsCiAgICAiZXhwIjogMTgwNjM3OTIwMAp9.YMOYR_8pZqqDRJkoAFuEWp-FaQfvmHXTOXKncBlRjdE'
+    secrets:
+      docker_username: ${{ secrets.DOCKER_CDOT_SYSTEMS_USERNAME }}
+      docker_password: ${{ secrets.DOCKER_CDOT_SYSTEMS_PASSWORD }}
+
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+      - name: Build changelog
+        id: build_changelog
+        uses: mikepenz/release-changelog-builder-action@main
+        with:
+          configuration: 'release-changelog-builder-config.json'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create release
+        id: create_release
+        uses: actions/create-release@latest
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          body: ${{steps.build_changelog.outputs.changelog}}
+          draft: false
+          prerelease: false
+
+  deploy-production:
+    name: Production Deploy
+    needs: [docker-production, release]
+    uses: Seneca-CDOT/telescope/.github/workflows/deploy-webhook.yml@master
+    with:
+      deploy_tag: production
+      webhook_url: https://telescope.cdot.systems:4000
+    secrets:
+      webhook_token: ${{ secrets.PRODUCTION_WEBHOOK_SECRET }}

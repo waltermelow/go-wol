@@ -1,0 +1,120 @@
+# Fuente: https://trstringer.com/github-actions-create-release-upload-artifacts/
+# Fuente: https://github.com/trstringer/azblogfilter/blob/f9caee2d91aa558865c2099c838d1691ee7069c3/.github/workflows/release.yaml
+
+name: release
+
+on:
+  push:
+    tags:
+      - '*'
+
+jobs:
+  # build:
+  #   strategy:
+  #     matrix:
+  #       go-version: [1.14.x, 1.15.x]
+  #       os: [ubuntu-latest, macos-latest, windows-latest]
+#
+  #   runs-on: ${{ matrix.os }}
+#
+  #   steps:
+  #     - uses: actions/checkout@v2
+  #     - uses: actions/setup-go@v2
+  #       with:
+  #         go-version: ${{ matrix.go-version }}
+  #       id: go
+#
+  #     - name: Test
+  #       run: go test -v ./...
+#
+  #     - name: Build
+  #       run: go build -v -o build/go-wol ./cmd/wol
+
+
+  build_release:
+    name: build_release
+    runs-on: ubuntu-latest
+    steps:
+      # - name: checkout
+      #   uses: actions/checkout@v2
+      #   with:
+      #     fetch-depth: 0
+      # - name: build
+      #   run: make build
+      - uses: actions/checkout@v2
+      - uses: actions/setup-go@v2
+        with:
+          go-version: ${{ matrix.go-version }}
+        id: go
+
+      - name: Test
+        run: go test -v ./...
+
+      - name: Build
+        run: go build -v -o build/go-wol ./cmd/wol
+
+
+      - name: version
+        run: echo "::set-output name=version::$(./app/build/go-wol-linux-amd64/go-wol --version)"
+        id: version
+      # - name: build artifacts
+      #   run: make build-linux && make build-windows && make build-darwin
+
+      # ------------------
+
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Build
+        run: echo ${{ github.sha }} > Release.txt
+
+      - name: Test
+        run: cat Release.txt
+
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            Release.txt
+            LICENSE
+      # ------------------
+
+      - name: release
+        uses: actions/create-release@v1
+        id: create_release
+        with:
+          draft: false
+          prerelease: false
+          release_name: ${{ steps.version.outputs.version }}
+          tag_name: ${{ github.ref }}
+          body_path: CHANGELOG.md
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - name: upload linux artifact
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./bin/azblogfilter.linux-amd64.tar.gz
+          asset_name: azblogfilter.linux-amd64.tar.gz
+          asset_content_type: application/gzip
+      - name: upload darwin artifact
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./bin/azblogfilter.darwin-amd64.tar.gz
+          asset_name: azblogfilter.darwin-amd64.tar.gz
+          asset_content_type: application/gzip
+      - name: upload windows artifact
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./bin/azblogfilter.windows-amd64.zip
+          asset_name: azblogfilter.windows-amd64.zip
+          asset_content_type: application/zip
